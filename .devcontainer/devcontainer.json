@@ -1,0 +1,11 @@
+{
+  "name": "2750 Student Dev",
+  "image": "socsguelph/cis2750:w26",
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
+  ],
+  "overrideCommand": true,
+  "remoteUser": "root",
+  "forwardPorts": [3000, 8000]
+}
