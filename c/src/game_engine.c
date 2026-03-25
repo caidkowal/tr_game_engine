@@ -538,3 +538,36 @@ Status game_engine_get_room_ids(const GameEngine *eng, int **ids_out, int *count
 void game_engine_free_string(void *ptr){
     free(ptr);
 }
+
+//added for a3
+//all treasures victory screen extended feature
+Status game_engine_get_total_treasure_count(const GameEngine *eng, int *count_out) {
+    if (!eng) {
+        return INVALID_ARGUMENT;
+    }
+
+    if (!count_out) {
+        return NULL_POINTER;
+    }
+
+    if (!eng->graph) {
+        return INTERNAL_ERROR;
+    }
+
+    const void * const *payloads = NULL;
+    int room_count = 0;
+
+    GraphStatus gs = graph_get_all_payloads(eng->graph, &payloads, &room_count);
+    if (gs != GRAPH_STATUS_OK) {
+        return INTERNAL_ERROR;
+    }
+
+    int total = 0;
+    for (int i = 0; i < room_count; i++) {
+        const Room *room = (const Room *)payloads[i];
+        total += room->treasure_count;
+    }
+
+    *count_out = total;
+    return OK;
+}

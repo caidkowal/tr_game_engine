@@ -32,6 +32,9 @@ class GameUI:
         self._profile_path = profile_path
         self._save_fn = save_fn
         self._message = "Use WASD or arrows to move. > for portal. r to reset. q to quit."
+        self._visited_rooms = set()
+        self._victory = False
+        self._start_time = datetime.datetime.utcnow()
 
     #public entry point
 
@@ -58,12 +61,18 @@ class GameUI:
 
         self._splash_screen(stdscr)
         self._game_loop(stdscr)
-        self._quit_screen(stdscr)
 
         self._update_and_save_profile()
 
+        if self._victory:
+            self._victory_screen(stdscr)
+        else:
+            self._quit_screen(stdscr)
+
     def _game_loop(self, stdscr) -> None:
         """Main input/render loop."""
+        self._visited_rooms.add(self._engine.player.get_room())
+
         while True:
             self._check_terminal_size(stdscr)
             self._draw(stdscr)
@@ -75,6 +84,8 @@ class GameUI:
 
             elif key == ord('r'):
                 self._engine.reset()
+                self._visited_rooms = set()
+                self._visited_rooms.add(self._engine.player.get_room())
                 self._message = "Game reset to initial state."
 
             elif key == ord('>'):
@@ -92,19 +103,35 @@ class GameUI:
             elif key in (curses.KEY_RIGHT, ord('d'), ord('D')):
                 self._try_move(Direction.EAST)
 
+            # --- ADDED: victory exit ---
+            if self._victory:
+                break
+
 
     #movement helpers
 
     def _try_move(self, direction: Direction) -> None:
         """Attempt a move and update the message bar with the result."""
+            
         collected_before = self._engine.player.get_collected_count()
+
         try:
             self._engine.move_player(direction)
+            self._visited_rooms.add(self._engine.player.get_room())
             collected_after = self._engine.player.get_collected_count()
+
+            # --- ADDED: total treasure + progress tracking ---
+            total = self._engine.get_total_treasure_count()
+
             if collected_after > collected_before:
-                self._message = f"You picked up a treasure! ({collected_after} collected)"
+                if collected_after == total:
+                    self._victory = True
+                    self._message = f"You picked up the final treasure! ({collected_after}/{total})"
+                else:
+                    self._message = f"You picked up a treasure! ({collected_after}/{total})"
             else:
-                self._message = ""
+                self._message = f"Collect the treasure fast, the clock is ticking!"
+
         except ImpassableError:
             self._message = "You can't go that way."
         except GameError as e:
@@ -126,6 +153,46 @@ class GameUI:
                 continue
         self._message = "No portal here."
 
+    # --- ADDED: victory screen ---
+    def _victory_screen(self, stdscr) -> None:
+        stdscr.erase()
+        height, width = stdscr.getmaxyx()
+        row = 0
+
+        collected = self._engine.player.get_collected_count()
+        total = self._engine.get_total_treasure_count()
+
+        elapsed = datetime.datetime.utcnow() - self._start_time
+        total_seconds = int(elapsed.total_seconds())
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        time_str = f"{minutes}m {seconds}s"
+
+        lines = [
+            "=" * min(40, width - 1),
+            "  YOU WIN!",
+            "=" * min(40, width - 1),
+            "",
+            f"  Player: {self._profile.get('player_name', 'Player')}",
+            f"  Treasure progress: {collected}/{total}",
+            f"  Games played: {self._profile.get('games_played', 0) + 1}",
+            f"  Max treasures collected: {max(collected, self._profile.get('max_treasure_collected', 0))}",
+            f"  Most rooms completed: {max(len(self._visited_rooms), self._profile.get('most_rooms_world_completed', 0))}",
+            "",
+            f"  Time elapsed: {time_str}",
+            "",
+            "  Press any key to exit...",
+        ]
+
+        for line in lines:
+            if row >= height - 1:
+                break
+            self._safe_addstr(stdscr, row, 0, line[:width - 1])
+            row += 1
+
+        stdscr.refresh()
+        stdscr.getch()
+
     # ------------------------------------------------------------------ #
     # Drawing                                                              #
     # ------------------------------------------------------------------ #
@@ -137,15 +204,13 @@ class GameUI:
 
         row = 0
 
-        
-
         # --- message bar (row 0) ---
         self._draw_message_bar(stdscr, row, width)
         row += 1
 
         # --- room name line (row 1) ---
         room_id = self._engine.player.get_room()
-        room_label = f"Room {room_id}"
+        room_label = f"Room {room_id}: Room"
         self._safe_addstr(stdscr, row, 0, room_label[:width - 1])
         row += 1
 
@@ -153,10 +218,13 @@ class GameUI:
         room_str = self._engine.render_current_room()
         room_lines = room_str.splitlines()
 
-        for line in room_lines:
+        legend_col = 30
+
+        for i, line in enumerate(room_lines):
             if row >= height - 3:
                 break
 
+            # --- draw room ---
             for col, ch in enumerate(line[:width - 1]):
                 if ch == '@':
                     stdscr.addstr(row, col, ch, curses.color_pair(2))
@@ -171,8 +239,26 @@ class GameUI:
                 else:
                     stdscr.addstr(row, col, ch)
 
-            row += 1
+            # --- draw legend (colored) ---
+            if i == 0:
+                self._safe_addstr(stdscr, row, legend_col, "Game Elements:")
+            elif i == 1:
+                stdscr.addstr(row, legend_col, "@", curses.color_pair(2))
+                self._safe_addstr(stdscr, row, legend_col + 2, "- player")
+            elif i == 2:
+                stdscr.addstr(row, legend_col, "#", curses.color_pair(3))
+                self._safe_addstr(stdscr, row, legend_col + 2, "- wall")
+            elif i == 3:
+                stdscr.addstr(row, legend_col, "$", curses.color_pair(1))
+                self._safe_addstr(stdscr, row, legend_col + 2, "- gold")
+            elif i == 4:
+                stdscr.addstr(row, legend_col, "X", curses.color_pair(4))
+                self._safe_addstr(stdscr, row, legend_col + 2, "- exit")
+            elif i == 5:
+                stdscr.addstr(row, legend_col, "O", curses.color_pair(5))
+                self._safe_addstr(stdscr, row, legend_col + 2, "- pushable")
 
+            row += 1
 
         # --- controls legend ---
         controls = "Controls: WASD/Arrows=move  >=portal  r=reset  q=quit"
@@ -180,11 +266,11 @@ class GameUI:
             self._safe_addstr(stdscr, row, 0, controls[:width - 1])
             row += 1
 
-        # --- player status bar (second to last row) ---
+        # --- player status bar ---
         status_row = height - 2
         self._draw_status_bar(stdscr, status_row, width)
 
-        # --- title and email (last row) ---
+        # --- title ---
         title_row = height - 1
         title = "Treasure Runner  |  ckowal02@uoguelph.ca"
         self._safe_addstr(stdscr, title_row, 0, title[:width - 1])
@@ -201,6 +287,7 @@ class GameUI:
         """Render player stats at the given row."""
         player = self._engine.player
         collected = player.get_collected_count()
+        total = self._engine.get_total_treasure_count()
         room_id = player.get_room()
         name = self._profile.get("player_name", "Player")
         x, y = player.get_position()
@@ -208,7 +295,7 @@ class GameUI:
             f"Player: {name}  |  "
             f"Room: {room_id}  |  "
             f"Pos: ({x},{y})  |  "
-            f"Treasures: {collected}"
+            f"Treasures: {collected}/{total}"
         )
         self._safe_addstr(stdscr, row, 0, status[:width - 1])
 
@@ -229,6 +316,7 @@ class GameUI:
             "",
             f"  Games played:           {self._profile.get('games_played', 0)}",
             f"  Max treasures collected: {self._profile.get('max_treasure_collected', 0)}",
+            f"  Most rooms completed:   {self._profile.get('most_rooms_world_completed', 0)}",
             f"  Last played:            {self._profile.get('timestamp_last_played', 'Never')}",
             "",
             "  Press any key to start...",
@@ -260,6 +348,7 @@ class GameUI:
             f"  Treasures collected this run: {collected}",
             f"  Games played:      {self._profile.get('games_played', 0) + 1}",
             f"  All-time best:     {max(collected, self._profile.get('max_treasure_collected', 0))}",
+            f"  Most rooms completed: {max(len(self._visited_rooms), self._profile.get('most_rooms_world_completed', 0))}",
             "",
             "  Press any key to exit...",
         ]
@@ -281,16 +370,27 @@ class GameUI:
         """Update profile stats after a game run and persist to disk."""
         collected = self._engine.player.get_collected_count()
 
+        rooms_visited = len(self._visited_rooms)
+
         self._profile["games_played"] = self._profile.get("games_played", 0) + 1
+
         self._profile["max_treasure_collected"] = max(
             collected,
             self._profile.get("max_treasure_collected", 0)
         )
+
+        self._profile["most_rooms_world_completed"] = max(
+            rooms_visited,
+            self._profile.get("most_rooms_world_completed", 0)
+        )
+
         self._profile["timestamp_last_played"] = datetime.datetime.utcnow().strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
 
         self._save_fn(self._profile_path, self._profile)
+
+        
 
     # ------------------------------------------------------------------ #
     # Utilities                                                            #

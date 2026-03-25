@@ -157,6 +157,11 @@ lib.game_engine_get_room_ids.restype  = ctypes.c_int
 lib.game_engine_reset.argtypes = [GameEngine]
 lib.game_engine_reset.restype  = ctypes.c_int
 
+#ADDED FOR A3
+#game_engine_get_total_treasure_count
+lib.game_engine_get_total_treasure_count.argtypes = [GameEngine, ctypes.POINTER(ctypes.c_int)]
+lib.game_engine_get_total_treasure_count.restype = ctypes.c_int
+
 
 
 # ============================================================

@@ -90,3 +90,10 @@ class GameEngine:
         status = lib.game_engine_reset(self._eng)
         if status != Status.OK:
             raise status_to_exception(status, "reset failed")
+
+    def get_total_treasure_count(self) -> int:
+        count = ctypes.c_int()
+        status = lib.game_engine_get_total_treasure_count(self._eng, ctypes.byref(count))
+        if status != Status.OK:
+            raise status_to_exception(status, "get_total_treasure_count failed")
+        return count.value
