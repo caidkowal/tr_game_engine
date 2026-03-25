@@ -8,6 +8,7 @@ and renders it - it never calls C functions directly.
 
 import curses
 import datetime
+import random
 
 from treasure_runner.bindings.bindings import Direction
 from treasure_runner.models.exceptions import ImpassableError, GameError
@@ -32,9 +33,14 @@ class GameUI:
         self._profile_path = profile_path
         self._save_fn = save_fn
         self._message = "Use WASD or arrows to move. > for portal. r to reset. q to quit."
+
         self._visited_rooms = set()
         self._victory = False
         self._start_time = datetime.datetime.utcnow()
+
+        self._room_names = {}
+        self._adjectives = ["Slimy", "Stinky", "Cold", "Hot", "Dark", "Ancient", "Dusty", "Creepy"]
+        self._nouns = ["Depths", "Cave", "Basement", "Cellar", "Chamber", "Tunnel", "Vault", "Pit"]
 
     #public entry point
 
@@ -153,7 +159,15 @@ class GameUI:
                 continue
         self._message = "No portal here."
 
-    # --- ADDED: victory screen ---
+    def _get_room_name(self, room_id: int) -> str:
+        """Return a consistent randomized name for a room."""
+        if room_id not in self._room_names:
+            adj = random.choice(self._adjectives)
+            noun = random.choice(self._nouns)
+            self._room_names[room_id] = f"{adj} {noun}"
+        return self._room_names[room_id]
+
+    #victory screen
     def _victory_screen(self, stdscr) -> None:
         stdscr.erase()
         height, width = stdscr.getmaxyx()
@@ -210,7 +224,8 @@ class GameUI:
 
         # --- room name line (row 1) ---
         room_id = self._engine.player.get_room()
-        room_label = f"Room {room_id}: Room"
+        room_name = self._get_room_name(room_id)
+        room_label = f"Room {room_id}: {room_name}"
         self._safe_addstr(stdscr, row, 0, room_label[:width - 1])
         row += 1
 
