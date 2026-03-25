@@ -189,11 +189,6 @@ Status game_engine_move_player(GameEngine *eng, Direction dir){
         return OK;
     }
 
-    //check walkable (walls, floor_grid)
-    if (!room_is_walkable(current_room, new_x, new_y)) {
-        return ROOM_IMPASSABLE;
-    }
-
     //check if stepping on portal
     int destination = room_get_portal_destination(current_room, new_x, new_y);
 
@@ -224,6 +219,11 @@ Status game_engine_move_player(GameEngine *eng, Direction dir){
         player_set_position(eng->player, start_x, start_y);
 
         return OK;
+    }
+
+    //check walkable (walls, floor_grid)
+    if (!room_is_walkable(current_room, new_x, new_y)) {
+        return ROOM_IMPASSABLE;
     }
 
     //normal floor movement

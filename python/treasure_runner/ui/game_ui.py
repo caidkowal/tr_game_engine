@@ -46,6 +46,16 @@ class GameUI:
         self._check_terminal_size(stdscr)
         curses.curs_set(0)
 
+        curses.start_color()
+        curses.use_default_colors()
+
+        # color pairs
+        curses.init_pair(1, curses.COLOR_YELLOW, -1)  # treasure $
+        curses.init_pair(2, curses.COLOR_CYAN, -1)     # player @
+        curses.init_pair(3, curses.COLOR_WHITE, -1)   # walls #
+        curses.init_pair(4, curses.COLOR_GREEN, -1)   # exit x
+        curses.init_pair(5, curses.COLOR_MAGENTA, -1)   # pushables O
+
         self._splash_screen(stdscr)
         self._game_loop(stdscr)
         self._quit_screen(stdscr)
@@ -127,6 +137,8 @@ class GameUI:
 
         row = 0
 
+        
+
         # --- message bar (row 0) ---
         self._draw_message_bar(stdscr, row, width)
         row += 1
@@ -140,11 +152,27 @@ class GameUI:
         # --- room render ---
         room_str = self._engine.render_current_room()
         room_lines = room_str.splitlines()
+
         for line in room_lines:
             if row >= height - 3:
                 break
-            self._safe_addstr(stdscr, row, 0, line[:width - 1])
+
+            for col, ch in enumerate(line[:width - 1]):
+                if ch == '@':
+                    stdscr.addstr(row, col, ch, curses.color_pair(2))
+                elif ch == '$':
+                    stdscr.addstr(row, col, ch, curses.color_pair(1))
+                elif ch == '#':
+                    stdscr.addstr(row, col, ch, curses.color_pair(3) | curses.A_DIM)
+                elif ch == 'X':
+                    stdscr.addstr(row, col, ch, curses.color_pair(4))
+                elif ch == 'O':
+                    stdscr.addstr(row, col, ch, curses.color_pair(5))
+                else:
+                    stdscr.addstr(row, col, ch)
+
             row += 1
+
 
         # --- controls legend ---
         controls = "Controls: WASD/Arrows=move  >=portal  r=reset  q=quit"
