@@ -5,4 +5,6 @@
 
 Status game_engine_get_total_treasure_count(const GameEngine *eng, int *count_out);
 
+Status game_engine_get_adjacency_matrix(const GameEngine *eng, int **matrix_out, int *size_out);
+
 #endif

@@ -22,12 +22,7 @@ MIN_COLS = 60
 class GameUI:
 
     def __init__(self, engine, profile: dict, profile_path: str, save_fn):
-        """
-        engine      - GameEngine instance (MVC controller)
-        profile     - dict loaded from the player profile JSON
-        profile_path - path to the profile file so we can save it on exit
-        save_fn     - callable(profile_path, profile) to persist the profile
-        """
+
         self._engine = engine
         self._profile = profile
         self._profile_path = profile_path
@@ -62,7 +57,7 @@ class GameUI:
         curses.init_pair(1, curses.COLOR_YELLOW, -1)  # treasure $
         curses.init_pair(2, curses.COLOR_CYAN, -1)     # player @
         curses.init_pair(3, curses.COLOR_WHITE, -1)   # walls #
-        curses.init_pair(4, curses.COLOR_GREEN, -1)   # exit x
+        curses.init_pair(4, curses.COLOR_GREEN, -1)   # portal x
         curses.init_pair(5, curses.COLOR_MAGENTA, -1)   # pushables O
 
         self._splash_screen(stdscr)
@@ -233,7 +228,7 @@ class GameUI:
         room_str = self._engine.render_current_room()
         room_lines = room_str.splitlines()
 
-        legend_col = 30
+        legend_col = 40
 
         for i, line in enumerate(room_lines):
             if row >= height - 3:
@@ -254,7 +249,7 @@ class GameUI:
                 else:
                     stdscr.addstr(row, col, ch)
 
-            # --- draw legend (colored) ---
+            # --- draw legend ---
             if i == 0:
                 self._safe_addstr(stdscr, row, legend_col, "Game Elements:")
             elif i == 1:
@@ -268,12 +263,16 @@ class GameUI:
                 self._safe_addstr(stdscr, row, legend_col + 2, "- gold")
             elif i == 4:
                 stdscr.addstr(row, legend_col, "X", curses.color_pair(4))
-                self._safe_addstr(stdscr, row, legend_col + 2, "- exit")
+                self._safe_addstr(stdscr, row, legend_col + 2, "- portal")
             elif i == 5:
                 stdscr.addstr(row, legend_col, "O", curses.color_pair(5))
                 self._safe_addstr(stdscr, row, legend_col + 2, "- pushable")
 
             row += 1
+
+        minimap_col = legend_col + 25
+        self._safe_addstr(stdscr, 1, minimap_col, "Minimap:")
+        self._draw_minimap(stdscr, 2, minimap_col)
 
         # --- controls legend ---
         controls = "Controls: WASD/Arrows=move  >=portal  r=reset  q=quit"
@@ -313,6 +312,35 @@ class GameUI:
             f"Treasures: {collected}/{total}"
         )
         self._safe_addstr(stdscr, row, 0, status[:width - 1])
+
+    def _draw_minimap(self, stdscr, start_row, start_col):
+        matrix = self._engine.get_adjacency_matrix()
+        n = len(matrix)
+
+        current = self._engine.player.get_room()
+
+        for i in range(n):
+            row = start_row + i
+
+            # choose color
+            if i == current:
+                attr = curses.color_pair(2)  # player
+            elif i in self._visited_rooms:
+                attr = curses.color_pair(4)  # visited
+            else:
+                attr = 0
+
+            # build connection list
+            connections = []
+            for j in range(n):
+                if matrix[i][j] == 1:
+                    connections.append(str(j))
+
+            conn_str = ", ".join(connections)
+
+            line = f"[{i}] -> {conn_str}"
+
+            self._safe_addstr(stdscr, row, start_col, line, attr)
 
     #spash screens                                                       
 
@@ -411,13 +439,18 @@ class GameUI:
     # Utilities                                                            #
     # ------------------------------------------------------------------ #
 
-    def _safe_addstr(self, stdscr, row: int, col: int, text: str) -> None:
-        """Write text without crashing if it hits the window edge."""
-        height, width = stdscr.getmaxyx()
-        if row < 0 or row >= height:
-            return
+    def _safe_addstr(self, stdscr, row, col, text, attr=0):
         try:
-            stdscr.addstr(row, col, text[:width - col - 1])
+            if attr:
+                stdscr.addstr(row, col, text, attr)
+            else:
+                stdscr.addstr(row, col, text)
+        except curses.error:
+            pass
+    
+    def _safe_addch(self, stdscr, row, col, ch, attr=0):
+        try:
+            stdscr.addch(row, col, ch, attr)
         except curses.error:
             pass
 

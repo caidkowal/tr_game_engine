@@ -571,3 +571,59 @@ Status game_engine_get_total_treasure_count(const GameEngine *eng, int *count_ou
     *count_out = total;
     return OK;
 }
+
+Status game_engine_get_adjacency_matrix(const GameEngine *eng, int **matrix_out, int *size_out) {
+    if (!eng) {
+        return INVALID_ARGUMENT;
+    }
+
+    if (!matrix_out || !size_out) {
+        return NULL_POINTER;
+    }
+
+    if (!eng->graph) {
+        return INTERNAL_ERROR;
+    }
+
+    const void * const *payloads = NULL;
+    int count = 0;
+
+    GraphStatus gs = graph_get_all_payloads(eng->graph, &payloads, &count);
+    if (gs != GRAPH_STATUS_OK) {
+        return INTERNAL_ERROR;
+    }
+
+    int *matrix = calloc((size_t)count * (size_t)count, sizeof(int));
+    if (!matrix) {
+        return NO_MEMORY;
+    }
+
+    for (int i = 0; i < count; i++) {
+        const Room *room = (const Room *)payloads[i];
+
+        // --- ONLY use portals (safe and correct) ---
+        for (int p = 0; p < room->portal_count; p++) {
+            int target = room->portals[p].target_room_id;
+
+            if (target < 0) continue;
+
+            int target_index = -1;
+
+            for (int j = 0; j < count; j++) {
+                const Room *candidate = (const Room *)payloads[j];
+                if (candidate->id == target) {
+                    target_index = j;
+                    break;
+                }
+            }
+
+            if (target_index >= 0) {
+                matrix[i * count + target_index] = 1;
+            }
+        }
+    }
+
+    *matrix_out = matrix;
+    *size_out = count;
+    return OK;
+}

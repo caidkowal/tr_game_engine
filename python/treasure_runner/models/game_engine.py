@@ -97,3 +97,28 @@ class GameEngine:
         if status != Status.OK:
             raise status_to_exception(status, "get_total_treasure_count failed")
         return count.value
+
+    def get_adjacency_matrix(self):
+        matrix_ptr = ctypes.POINTER(ctypes.c_int)()
+        size = ctypes.c_int()
+
+        status = lib.game_engine_get_adjacency_matrix(
+            self._eng,
+            ctypes.byref(matrix_ptr),
+            ctypes.byref(size)
+        )
+
+        if status != Status.OK:
+            raise status_to_exception(status, "get_adjacency_matrix failed")
+
+        n = size.value
+        matrix = []
+
+        for i in range(n):
+            row = []
+            for j in range(n):
+                row.append(matrix_ptr[i * n + j])
+            matrix.append(row)
+
+        lib.game_engine_free_string(matrix_ptr)
+        return matrix

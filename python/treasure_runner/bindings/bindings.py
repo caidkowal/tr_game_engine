@@ -162,6 +162,9 @@ lib.game_engine_reset.restype  = ctypes.c_int
 lib.game_engine_get_total_treasure_count.argtypes = [GameEngine, ctypes.POINTER(ctypes.c_int)]
 lib.game_engine_get_total_treasure_count.restype = ctypes.c_int
 
+lib.game_engine_get_adjacency_matrix.argtypes = [GameEngine, ctypes.POINTER(ctypes.POINTER(ctypes.c_int)), ctypes.POINTER(ctypes.c_int)]
+lib.game_engine_get_adjacency_matrix.restype = ctypes.c_int
+
 
 
 # ============================================================
