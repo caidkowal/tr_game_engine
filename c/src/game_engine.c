@@ -1,4 +1,5 @@
 #include "game_engine.h"
+#include "game_engine_extra.h"
 #include "world_loader.h"
 #include "datagen.h"
 #include "graph.h"
@@ -186,6 +187,8 @@ Status game_engine_move_player(GameEngine *eng, Direction dir){
                 break;
             }
         }
+        //player moves onto the tile where the treasure was
+        player_set_position(eng->player, new_x, new_y);
         return OK;
     }
 
@@ -625,5 +628,178 @@ Status game_engine_get_adjacency_matrix(const GameEngine *eng, int **matrix_out,
 
     *matrix_out = matrix;
     *size_out = count;
+    return OK;
+}
+
+
+/* ===========================================================
+ * Portal functions (game_engine_portal.h)
+ * Added for A3 - explicit portal control and tile lookahead
+ * =========================================================== */
+
+/* ------------------------------------------------------------------
+ * game_engine_peek_tile
+ * Look at the tile one step ahead in the given direction without
+ * moving the player. Used by the UI to decide whether to step onto
+ * a portal tile vs. using normal movement logic.
+ * ------------------------------------------------------------------ */
+Status game_engine_peek_tile(const GameEngine *eng, Direction dir, int *tile_type_out) {
+    if (!eng || !tile_type_out) {
+        return INVALID_ARGUMENT;
+    }
+
+    if (!eng->player || !eng->graph) {
+        return INTERNAL_ERROR;
+    }
+
+    //get current player position
+    int x = 0, y = 0;
+    Status ps = player_get_position(eng->player, &x, &y);
+    if (ps != OK) {
+        return INTERNAL_ERROR;
+    }
+
+    //compute position one step in the given direction
+    int new_x = x;
+    int new_y = y;
+    switch (dir) {
+        case DIR_NORTH: new_y--; break;
+        case DIR_SOUTH: new_y++; break;
+        case DIR_EAST:  new_x++; break;
+        case DIR_WEST:  new_x--; break;
+        default: return INVALID_ARGUMENT;
+    }
+
+    //look up current room
+    int room_id = player_get_room(eng->player);
+    Room key;
+    memset(&key, 0, sizeof(Room));
+    key.id = room_id;
+
+    Room *room = (Room *)graph_get_payload(eng->graph, &key);
+    if (!room) {
+        return GE_NO_SUCH_ROOM;
+    }
+
+    //classify tile and return as int (matches RoomTileType enum)
+    *tile_type_out = (int)room_classify_tile(room, new_x, new_y, NULL);
+    return OK;
+}
+
+
+/* ------------------------------------------------------------------
+ * game_engine_use_portal
+ * Traverse the portal the player is currently standing on.
+ * Checks whether the portal is gated by a switch and whether that
+ * switch is currently pressed (pushable resting on it).
+ * ------------------------------------------------------------------ */
+Status game_engine_use_portal(GameEngine *eng) {
+    if (!eng) {
+        return INVALID_ARGUMENT;
+    }
+
+    if (!eng->player || !eng->graph) {
+        return INTERNAL_ERROR;
+    }
+
+    //get player's current position
+    int x = 0, y = 0;
+    Status ps = player_get_position(eng->player, &x, &y);
+    if (ps != OK) {
+        return INTERNAL_ERROR;
+    }
+
+    //look up current room
+    int room_id = player_get_room(eng->player);
+    Room key;
+    memset(&key, 0, sizeof(Room));
+    key.id = room_id;
+
+    Room *room = (Room *)graph_get_payload(eng->graph, &key);
+    if (!room) {
+        return GE_NO_SUCH_ROOM;
+    }
+
+    //find the portal at the player's current tile
+    Portal *portal = NULL;
+    for (int i = 0; i < room->portal_count; i++) {
+        if (room->portals[i].x == x && room->portals[i].y == y) {
+            portal = &room->portals[i];
+            break;
+        }
+    }
+
+    //player is not standing on any portal tile
+    if (!portal) {
+        return ROOM_NO_PORTAL;
+    }
+
+    //portal has no destination
+    int destination = portal->target_room_id;
+    if (destination < 0) {
+        return ROOM_NO_PORTAL;
+    }
+
+    //check if portal is gated by a switch
+    if (portal->gated && portal->required_switch_id >= 0) {
+        bool switch_pressed = false;
+
+        //find the switch that controls this portal
+        for (int s = 0; s < room->switch_count; s++) {
+            if (room->switches[s].id == portal->required_switch_id) {
+                //switch is pressed when any pushable occupies its tile
+                for (int p = 0; p < room->pushable_count; p++) {
+                    if (room->pushables[p].x == room->switches[s].x &&
+                        room->pushables[p].y == room->switches[s].y) {
+                        switch_pressed = true;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
+        if (!switch_pressed) {
+            return ROOM_IMPASSABLE;
+        }
+    }
+
+    //find destination room
+    key.id = destination;
+    Room *target = (Room *)graph_get_payload(eng->graph, &key);
+    if (!target) {
+        return GE_NO_SUCH_ROOM;
+    }
+
+    //move player to new room and place at start position
+    player_move_to_room(eng->player, destination);
+
+    int start_x = 0, start_y = 0;
+    Status rs = room_get_start_position(target, &start_x, &start_y);
+    if (rs != OK) {
+        return INTERNAL_ERROR;
+    }
+
+    player_set_position(eng->player, start_x, start_y);
+    return OK;
+}
+
+
+/* ------------------------------------------------------------------
+ * game_engine_set_player_position
+ * Set player position directly, bypassing all movement and
+ * interaction logic. Used to step the player onto a portal tile
+ * without triggering automatic portal traversal.
+ * ------------------------------------------------------------------ */
+Status game_engine_set_player_position(GameEngine *eng, int x, int y) {
+    if (!eng) {
+        return INVALID_ARGUMENT;
+    }
+
+    if (!eng->player) {
+        return INTERNAL_ERROR;
+    }
+
+    player_set_position(eng->player, x, y);
     return OK;
 }

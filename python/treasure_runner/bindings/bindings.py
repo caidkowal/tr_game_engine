@@ -45,6 +45,17 @@ class Status(IntEnum):
     WL_ERR_CONFIG = 10
     WL_ERR_DATAGEN = 11
 
+
+class RoomTileType(IntEnum):
+    """Tile classification values (matches RoomTileType enum in room.h)."""
+    INVALID  = 0
+    WALL     = 1
+    FLOOR    = 2
+    PUSHABLE = 3
+    TREASURE = 4
+    PORTAL   = 5
+
+
 # Backwards compatibility for existing imports
 GameEngineStatus = Status
 
@@ -73,7 +84,6 @@ class Treasure(ctypes.Structure):
 
 def _find_library():
     """Locate libbackend.so under the project dist directory."""
-    # Optional override via env
     env_path = os.getenv("TREASURE_RUNNER_DIST")
     candidates = []
 
@@ -81,7 +91,6 @@ def _find_library():
         candidates.append(Path(env_path) / "libbackend.so")
         candidates.append(Path(env_path) / "libpuzzlegen.so")
 
-    # Project-relative: ../../dist relative to this file
     here = Path(__file__).resolve()
     repo_root = here.parent.parent.parent.parent
     candidates.append(repo_root / "dist" / "libbackend.so")
@@ -93,7 +102,6 @@ def _find_library():
             found[path.name] = path
 
     if "libbackend.so" in found:
-        # Ensure puzzlegen is loaded first if present to satisfy dependencies.
         puzzlegen = found.get("libpuzzlegen.so")
         if puzzlegen:
             ctypes.CDLL(str(puzzlegen))
@@ -109,106 +117,107 @@ lib = ctypes.CDLL(_LIB_PATH)
 
 
 # ============================================================
-# C Function Signatures
+# C Opaque Pointer Types
 # ============================================================
 
-# Opaque pointer type for GameEngine
 GameEngine = ctypes.c_void_p
+Player     = ctypes.c_void_p
+Room       = ctypes.c_void_p
 
-# opaque pointer type for Player
-Player = ctypes.c_void_p
 
-# Room is opaque - no direct room accessors exposed to Python
-Room = ctypes.c_void_p
+# ============================================================
+# C Function Signatures - GameEngine (core)
+# ============================================================
 
-#create
 lib.game_engine_create.argtypes = [ctypes.c_char_p, ctypes.POINTER(GameEngine)]
 lib.game_engine_create.restype  = ctypes.c_int
 
-#destroy
 lib.game_engine_destroy.argtypes = [GameEngine]
-lib.game_engine_destroy.restype = None
+lib.game_engine_destroy.restype  = None
 
-#game_engine_get_player
 lib.game_engine_get_player.argtypes = [GameEngine]
 lib.game_engine_get_player.restype  = Player
 
-#game_engine_move_player
 lib.game_engine_move_player.argtypes = [GameEngine, ctypes.c_int]
 lib.game_engine_move_player.restype  = ctypes.c_int
 
-#game_engine_render_current_room
 lib.game_engine_render_current_room.argtypes = [GameEngine, ctypes.POINTER(ctypes.c_char_p)]
 lib.game_engine_render_current_room.restype  = ctypes.c_int
 
-#game_engine_get_room_count
 lib.game_engine_get_room_count.argtypes = [GameEngine, ctypes.POINTER(ctypes.c_int)]
 lib.game_engine_get_room_count.restype  = ctypes.c_int
 
-#game_engine_get_room_dimensions
-lib.game_engine_get_room_dimensions.argtypes = [GameEngine, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int)]
+lib.game_engine_get_room_dimensions.argtypes = [GameEngine,
+                                                ctypes.POINTER(ctypes.c_int),
+                                                ctypes.POINTER(ctypes.c_int)]
 lib.game_engine_get_room_dimensions.restype  = ctypes.c_int
 
-#game_engine_get_room_ids
-lib.game_engine_get_room_ids.argtypes = [GameEngine, ctypes.POINTER(ctypes.POINTER(ctypes.c_int)), ctypes.POINTER(ctypes.c_int)]
+lib.game_engine_get_room_ids.argtypes = [GameEngine,
+                                         ctypes.POINTER(ctypes.POINTER(ctypes.c_int)),
+                                         ctypes.POINTER(ctypes.c_int)]
 lib.game_engine_get_room_ids.restype  = ctypes.c_int
 
-#game_engine_reset
 lib.game_engine_reset.argtypes = [GameEngine]
 lib.game_engine_reset.restype  = ctypes.c_int
 
-#ADDED FOR A3
-#game_engine_get_total_treasure_count
-lib.game_engine_get_total_treasure_count.argtypes = [GameEngine, ctypes.POINTER(ctypes.c_int)]
-lib.game_engine_get_total_treasure_count.restype = ctypes.c_int
 
-lib.game_engine_get_adjacency_matrix.argtypes = [GameEngine, ctypes.POINTER(ctypes.POINTER(ctypes.c_int)), ctypes.POINTER(ctypes.c_int)]
-lib.game_engine_get_adjacency_matrix.restype = ctypes.c_int
+# ============================================================
+# C Function Signatures - GameEngine (A3 extras)
+# ============================================================
 
+lib.game_engine_get_total_treasure_count.argtypes = [GameEngine,
+                                                      ctypes.POINTER(ctypes.c_int)]
+lib.game_engine_get_total_treasure_count.restype  = ctypes.c_int
+
+lib.game_engine_get_adjacency_matrix.argtypes = [GameEngine,
+                                                  ctypes.POINTER(ctypes.POINTER(ctypes.c_int)),
+                                                  ctypes.POINTER(ctypes.c_int)]
+lib.game_engine_get_adjacency_matrix.restype  = ctypes.c_int
+
+# Portal functions (game_engine_portal.h)
+lib.game_engine_peek_tile.argtypes = [GameEngine,
+                                       ctypes.c_int,
+                                       ctypes.POINTER(ctypes.c_int)]
+lib.game_engine_peek_tile.restype  = ctypes.c_int
+
+lib.game_engine_use_portal.argtypes = [GameEngine]
+lib.game_engine_use_portal.restype  = ctypes.c_int
+
+lib.game_engine_set_player_position.argtypes = [GameEngine, ctypes.c_int, ctypes.c_int]
+lib.game_engine_set_player_position.restype  = ctypes.c_int
 
 
 # ============================================================
 # C Function Signatures - Player
 # ============================================================
 
-#get room
 lib.player_get_room.argtypes = [Player]
-lib.player_get_room.restype = ctypes.c_int
+lib.player_get_room.restype  = ctypes.c_int
 
-#get position
-lib.player_get_position.argtypes = [Player, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int)]
-lib.player_get_position.restype = ctypes.c_int
+lib.player_get_position.argtypes = [Player,
+                                     ctypes.POINTER(ctypes.c_int),
+                                     ctypes.POINTER(ctypes.c_int)]
+lib.player_get_position.restype  = ctypes.c_int
 
-#get collected count
 lib.player_get_collected_count.argtypes = [Player]
 lib.player_get_collected_count.restype  = ctypes.c_int
 
-#has collected treasure
 lib.player_has_collected_treasure.argtypes = [Player, ctypes.c_int]
 lib.player_has_collected_treasure.restype  = ctypes.c_bool
 
-#get collected treasures
 lib.player_get_collected_treasures.argtypes = [Player, ctypes.POINTER(ctypes.c_int)]
 lib.player_get_collected_treasures.restype  = ctypes.POINTER(ctypes.POINTER(Treasure))
 
-#player reset
 lib.player_reset_to_start.argtypes = [Player, ctypes.c_int, ctypes.c_int, ctypes.c_int]
 lib.player_reset_to_start.restype  = ctypes.c_int
-
-
-# ============================================================
-# C Function Signatures - Room
-# ============================================================
 
 
 # ============================================================
 # Memory Management
 # ============================================================
 
-#free string
 lib.game_engine_free_string.argtypes = [ctypes.c_void_p]
 lib.game_engine_free_string.restype  = None
 
-#destroy treasure
 lib.destroy_treasure.argtypes = [ctypes.POINTER(Treasure)]
 lib.destroy_treasure.restype  = None

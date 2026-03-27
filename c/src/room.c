@@ -263,6 +263,38 @@ RoomTileType room_classify_tile(const Room *r, int x, int y, int *out_id){
 
 }
 
+/* ------------------------------------------------------------------
+ * Helper: check whether a portal is currently locked.
+ *
+ * A portal is locked if it is gated (has a required switch) AND
+ * no pushable is currently resting on that switch's tile.
+ * ------------------------------------------------------------------ */
+static bool portal_is_locked(const Room *r, int portal_idx) {
+    const Portal *p = &r->portals[portal_idx];
+
+    //not gated - always open
+    if (!p->gated || p->required_switch_id < 0) {
+        return false;
+    }
+
+    //find the controlling switch
+    for (int s = 0; s < r->switch_count; s++) {
+        if (r->switches[s].id == p->required_switch_id) {
+            //switch is pressed when a pushable occupies its tile
+            for (int j = 0; j < r->pushable_count; j++) {
+                if (r->pushables[j].x == r->switches[s].x &&
+                    r->pushables[j].y == r->switches[s].y) {
+                    return false;   //switch pressed, portal open
+                }
+            }
+            return true;    //switch not pressed, portal locked
+        }
+    }
+
+    //switch not found, treat as locked
+    return true;
+}
+
 Status room_render(const Room *r, const Charset *charset, char *buffer, 
                    int buffer_width, int buffer_height){
 
@@ -298,6 +330,25 @@ Status room_render(const Room *r, const Charset *charset, char *buffer,
 
         }
     }
+
+    //overlay switches before portals and pushables
+    //a switch shows switch_on (+) when a pushable is on it, switch_off (=) otherwise
+    for (int i = 0; i < r->switch_count; i++) {
+        int index = r->switches[i].y * buffer_width + r->switches[i].x;
+
+        //check if any pushable is resting on this switch
+        bool pressed = false;
+        for (int j = 0; j < r->pushable_count; j++) {
+            if (r->pushables[j].x == r->switches[i].x &&
+                r->pushables[j].y == r->switches[i].y) {
+                pressed = true;
+                break;
+            }
+        }
+
+        buffer[index] = pressed ? charset->switch_on : charset->switch_off;
+    }
+
     //overlay treasures (only uncollected)
     for (int i = 0; i < r->treasure_count; i++) {
         if (!r->treasures[i].collected) {
@@ -307,15 +358,37 @@ Status room_render(const Room *r, const Charset *charset, char *buffer,
     }
 
     //overlay portals
+    //open portals show charset->portal (the normal portal character, e.g. X)
+    //locked portals show '!' as a sentinel - the UI layer renders this as a red X
+    //so the player always sees X, but the color tells them if it's locked
     for (int i = 0; i < r->portal_count; i++) {
         int index = r->portals[i].y * buffer_width + r->portals[i].x;
-        buffer[index] = charset->portal;
+        if (portal_is_locked(r, i)) {
+            buffer[index] = '!';   /* locked portal sentinel: UI displays as red X */
+        } else {
+            buffer[index] = charset->portal;
+        }
     }
 
     //overlay pushables
+    //if a pushable is resting on a switch tile, skip rendering it as a pushable -
+    //the switch_on char (+) already shows there, visually "consuming" the pushable.
+    //this matches the instructor-approved behaviour for when the switch is directly
+    //in front of the portal it controls (so the player can still walk through).
     for (int i = 0; i < r->pushable_count; i++) {
-        int index = r->pushables[i].y * buffer_width + r->pushables[i].x;
-        buffer[index] = charset->pushable;
+        bool on_switch = false;
+        for (int j = 0; j < r->switch_count; j++) {
+            if (r->pushables[i].x == r->switches[j].x &&
+                r->pushables[i].y == r->switches[j].y) {
+                on_switch = true;
+                break;
+            }
+        }
+        if (!on_switch) {
+            int index = r->pushables[i].y * buffer_width + r->pushables[i].x;
+            buffer[index] = charset->pushable;
+        }
+        //if on_switch: the switch_on char (+) is already rendered - do nothing
     }
 
     return OK;

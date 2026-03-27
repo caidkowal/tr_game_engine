@@ -52,6 +52,11 @@ static Portal* load_portals(const DG_Room *dg_room, int *error) {
         new_portals[i].y = dg_room->portals[i].y;
         new_portals[i].target_room_id = dg_room->portals[i].neighbor_id;
         new_portals[i].name = NULL;
+
+        //set gated flag and required switch id from datagen
+        //a portal is gated if datagen assigned it a required_switch_id >= 0
+        new_portals[i].required_switch_id = dg_room->portals[i].required_switch_id;
+        new_portals[i].gated = (dg_room->portals[i].required_switch_id >= 0);
     }
     
     return new_portals;
@@ -139,6 +144,34 @@ static Pushable* load_pushables(const DG_Room *dg_room, int *error) {
     return new_pushables;
 }
 
+//helper to load switches from datagen room
+//switches are simple structs with no pointer fields, so no deep copy needed
+static Switch* load_switches(const DG_Room *dg_room, int *error) {
+    *error = 0;
+
+    //no switches to load
+    if (dg_room->switch_count == 0) {
+        return NULL;
+    }
+
+    //allocate switch array
+    Switch *new_switches = malloc(dg_room->switch_count * sizeof(Switch));
+    if (!new_switches) {
+        *error = 1;
+        return NULL;
+    }
+
+    //copy each switch from datagen
+    for (int i = 0; i < dg_room->switch_count; i++) {
+        new_switches[i].id = dg_room->switches[i].id;
+        new_switches[i].x = dg_room->switches[i].x;
+        new_switches[i].y = dg_room->switches[i].y;
+        new_switches[i].portal_id = dg_room->switches[i].portal_id;
+    }
+
+    return new_switches;
+}
+
 //helper to create and populate a single room from datagen data
 static Room* create_room_from_datagen(const DG_Room *dg_room, int *error) {
     *error = 0;
@@ -189,6 +222,16 @@ static Room* create_room_from_datagen(const DG_Room *dg_room, int *error) {
     }
     new_room->pushables = new_pushables;
     new_room->pushable_count = dg_room->pushable_count;
+
+    //load switches using helper function
+    Switch *new_switches = load_switches(dg_room, &load_error);
+    if (load_error) {
+        room_destroy(new_room);
+        *error = 1;
+        return NULL;
+    }
+    new_room->switches = new_switches;
+    new_room->switch_count = dg_room->switch_count;
 
     return new_room;
 }
@@ -276,6 +319,8 @@ Status loader_load_world(const char *config_file, Graph **graph_out, Room **firs
     charset_out->treasure = dg_charset->treasure;
     charset_out->portal = dg_charset->portal;
     charset_out->pushable = dg_charset->pushable;
+    charset_out->switch_off = dg_charset->switch_off;
+    charset_out->switch_on = dg_charset->switch_on;
 
     //create graph that will own all rooms
     Graph *graph = NULL;
