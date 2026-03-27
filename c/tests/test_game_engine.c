@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "game_engine.h"
+#include "game_engine_extra.h"
 #include "world_loader.h"
 #include "graph.h"
 #include "room.h"
@@ -321,6 +322,84 @@ START_TEST(test_render_collected_treasure_as_floor)
 END_TEST
 
 
+/* game_engine_peek_tile returns a valid tile type in each direction */
+START_TEST(test_ckowal_peek_tile_returns_valid_tile_type)
+{
+    Direction dirs[4] = {DIR_NORTH, DIR_SOUTH, DIR_EAST, DIR_WEST};
+
+    for (int i = 0; i < 4; i++) {
+        int tile_type = -1;
+        Status s = game_engine_peek_tile(engine, dirs[i], &tile_type);
+        ck_assert_int_eq(s, OK);
+        //tile type must be in the valid RoomTileType range (0..5)
+        ck_assert_int_ge(tile_type, 0);
+        ck_assert_int_le(tile_type, 5);
+    }
+}
+END_TEST
+
+/* game_engine_peek_tile null args return INVALID_ARGUMENT */
+START_TEST(test_ckowal_peek_tile_null_args)
+{
+    int tile_type = -1;
+
+    //null engine
+    Status s1 = game_engine_peek_tile(NULL, DIR_EAST, &tile_type);
+    ck_assert_int_eq(s1, INVALID_ARGUMENT);
+
+    //null output pointer
+    Status s2 = game_engine_peek_tile(engine, DIR_EAST, NULL);
+    ck_assert_int_eq(s2, INVALID_ARGUMENT);
+}
+END_TEST
+
+/* game_engine_set_player_position moves the player to the given coords */
+START_TEST(test_ckowal_set_player_position_changes_coords)
+{
+    const Player *p = game_engine_get_player(engine);
+    ck_assert_ptr_nonnull(p);
+
+    //get the starting position
+    int orig_x = 0;
+    int orig_y = 0;
+    player_get_position(p, &orig_x, &orig_y);
+
+    //set player to a different interior tile
+    int new_x = orig_x + 1;
+    int new_y = orig_y;
+    Status s = game_engine_set_player_position(engine, new_x, new_y);
+    ck_assert_int_eq(s, OK);
+
+    //verify position changed
+    int cur_x = 0;
+    int cur_y = 0;
+    player_get_position(p, &cur_x, &cur_y);
+    ck_assert_int_eq(cur_x, new_x);
+    ck_assert_int_eq(cur_y, new_y);
+}
+END_TEST
+
+/* game_engine_set_player_position with null engine returns INVALID_ARGUMENT */
+START_TEST(test_ckowal_set_player_position_null_engine)
+{
+    Status s = game_engine_set_player_position(NULL, 1, 1);
+    ck_assert_int_eq(s, INVALID_ARGUMENT);
+}
+END_TEST
+
+/* game_engine_use_portal when not standing on a portal returns ROOM_NO_PORTAL */
+START_TEST(test_ckowal_use_portal_not_on_portal_tile)
+{
+    //move player one tile east so they are on a floor tile, not the starting portal
+    game_engine_move_player(engine, DIR_EAST);
+
+    //now attempt to use portal - player is not on a portal tile
+    Status s = game_engine_use_portal(engine);
+    ck_assert_int_eq(s, ROOM_NO_PORTAL);
+}
+END_TEST
+
+
 /* ============================================================ */
 /* Suite */
 /* ============================================================ */
@@ -330,6 +409,7 @@ Suite *engine_suite(void)
     Suite *s = suite_create("GameEngine");
     TCase *tc = tcase_create("HappyPath");
     TCase *a2 = tcase_create("Assignment2");
+    TCase *a3 = tcase_create("Assignment3");
 
     tcase_add_checked_fixture(tc, setup_engine, teardown_engine);
 
@@ -350,8 +430,17 @@ Suite *engine_suite(void)
     tcase_add_test(a2, test_game_engine_free_string);
     tcase_add_test(a2, test_render_collected_treasure_as_floor);
 
+    //assignment 3 tests
+    tcase_add_checked_fixture(a3, setup_engine, teardown_engine);
+
+    tcase_add_test(a3, test_ckowal_peek_tile_returns_valid_tile_type);
+    tcase_add_test(a3, test_ckowal_peek_tile_null_args);
+    tcase_add_test(a3, test_ckowal_set_player_position_changes_coords);
+    tcase_add_test(a3, test_ckowal_set_player_position_null_engine);
+    tcase_add_test(a3, test_ckowal_use_portal_not_on_portal_tile);
 
     suite_add_tcase(s, tc);
     suite_add_tcase(s, a2);
+    suite_add_tcase(s, a3);
     return s;
 }

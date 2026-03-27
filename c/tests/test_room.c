@@ -389,6 +389,8 @@ START_TEST(test_room_render_simple)
     portals[0].x = 3;
     portals[0].y = 2;
     portals[0].target_room_id = 5;
+    portals[0].gated = false;
+    portals[0].required_switch_id = -1;
     room_set_portals(test_room, portals, 1);
 
     //create charset
@@ -398,6 +400,9 @@ START_TEST(test_room_render_simple)
     charset.treasure = '$';
     charset.portal = 'X';
     charset.player = '@';
+    charset.switch_off = '=';
+    charset.switch_on = '+';
+    charset.pushable = 'O';
 
     //create buffer
     char buffer[20]; // 5 * 4 = 20
@@ -420,7 +425,7 @@ START_TEST(test_room_render_simple)
     //check treasure at (1, 1)
     ck_assert_int_eq(buffer[1 * 5 + 1], '$');
     
-    //check portal at (3, 2)
+    //check portal at (3, 2) - open portal shows 'X'
     ck_assert_int_eq(buffer[2 * 5 + 3], 'X');
     
     //check interior wall at (2, 2)
@@ -745,6 +750,162 @@ START_TEST(test_room_try_push_invalid_index)
 END_TEST
 
 
+/* render_switches: switch_off char appears when no pushable on switch */
+START_TEST(test_ckowal_room_render_switch_off)
+{
+    Room *test_room = room_create(1, "SwitchTest", 5, 5);
+    ck_assert_ptr_nonnull(test_room);
+
+    bool *grid = malloc(5 * 5 * sizeof(bool));
+    for (int i = 0; i < 25; i++) { grid[i] = true; }
+    room_set_floor_grid(test_room, grid);
+
+    //add a switch at interior tile (2, 2)
+    Switch *switches = malloc(sizeof(Switch));
+    switches[0].id = 0;
+    switches[0].x = 2;
+    switches[0].y = 2;
+    switches[0].portal_id = 0;
+    test_room->switches = switches;
+    test_room->switch_count = 1;
+
+    Charset cs;
+    cs.wall = '#'; cs.floor = '.'; cs.treasure = '$';
+    cs.portal = 'X'; cs.player = '@';
+    cs.switch_off = '='; cs.switch_on = '+'; cs.pushable = 'O';
+
+    char buffer[25];
+    Status s = room_render(test_room, &cs, buffer, 5, 5);
+    ck_assert_int_eq(s, OK);
+
+    //switch tile should show switch_off since no pushable is on it
+    ck_assert_int_eq(buffer[2 * 5 + 2], '=');
+
+    room_destroy(test_room);
+}
+END_TEST
+
+/* render_switches: switch_on char appears when pushable is on switch */
+START_TEST(test_ckowal_room_render_switch_pressed)
+{
+    Room *test_room = room_create(1, "SwitchOnTest", 5, 5);
+    ck_assert_ptr_nonnull(test_room);
+
+    bool *grid = malloc(5 * 5 * sizeof(bool));
+    for (int i = 0; i < 25; i++) { grid[i] = true; }
+    room_set_floor_grid(test_room, grid);
+
+    //switch at (2, 2)
+    Switch *switches = malloc(sizeof(Switch));
+    switches[0].id = 0;
+    switches[0].x = 2;
+    switches[0].y = 2;
+    switches[0].portal_id = 0;
+    test_room->switches = switches;
+    test_room->switch_count = 1;
+
+    //pushable on top of the switch tile (2, 2)
+    Pushable *pushables = malloc(sizeof(Pushable));
+    pushables[0].id = 0;
+    pushables[0].name = strdup("Rock");
+    pushables[0].x = 2;
+    pushables[0].y = 2;
+    test_room->pushables = pushables;
+    test_room->pushable_count = 1;
+
+    Charset cs;
+    cs.wall = '#'; cs.floor = '.'; cs.treasure = '$';
+    cs.portal = 'X'; cs.player = '@';
+    cs.switch_off = '='; cs.switch_on = '+'; cs.pushable = 'O';
+
+    char buffer[25];
+    Status s = room_render(test_room, &cs, buffer, 5, 5);
+    ck_assert_int_eq(s, OK);
+
+    //switch tile should show switch_on (pushable consumed onto switch)
+    ck_assert_int_eq(buffer[2 * 5 + 2], '+');
+
+    room_destroy(test_room);
+}
+END_TEST
+
+/* render_portals: locked portal shows '!' sentinel */
+START_TEST(test_ckowal_room_render_locked_portal_sentinel)
+{
+    Room *test_room = room_create(1, "LockTest", 5, 5);
+    ck_assert_ptr_nonnull(test_room);
+
+    bool *grid = malloc(5 * 5 * sizeof(bool));
+    for (int i = 0; i < 25; i++) { grid[i] = true; }
+    room_set_floor_grid(test_room, grid);
+
+    //switch at (1, 1) - not pressed (no pushable on it)
+    Switch *switches = malloc(sizeof(Switch));
+    switches[0].id = 0;
+    switches[0].x = 1;
+    switches[0].y = 1;
+    switches[0].portal_id = 0;
+    test_room->switches = switches;
+    test_room->switch_count = 1;
+
+    //gated portal at (3, 2) controlled by switch 0
+    Portal *portals = malloc(sizeof(Portal));
+    portals[0].id = 0;
+    portals[0].name = strdup("LockedDoor");
+    portals[0].x = 3;
+    portals[0].y = 2;
+    portals[0].target_room_id = 5;
+    portals[0].gated = true;
+    portals[0].required_switch_id = 0;
+    room_set_portals(test_room, portals, 1);
+
+    Charset cs;
+    cs.wall = '#'; cs.floor = '.'; cs.treasure = '$';
+    cs.portal = 'X'; cs.player = '@';
+    cs.switch_off = '='; cs.switch_on = '+'; cs.pushable = 'O';
+
+    char buffer[25];
+    Status s = room_render(test_room, &cs, buffer, 5, 5);
+    ck_assert_int_eq(s, OK);
+
+    //locked portal should render as '!' sentinel, not 'X'
+    ck_assert_int_eq(buffer[2 * 5 + 3], '!');
+
+    room_destroy(test_room);
+}
+END_TEST
+
+/* room_classify_tile: pushable tile is classified as ROOM_TILE_PUSHABLE */
+START_TEST(test_ckowal_room_classify_tile_pushable)
+{
+    Room *test_room = room_create(1, "ClassifyPush", 5, 5);
+    ck_assert_ptr_nonnull(test_room);
+
+    bool *grid = malloc(5 * 5 * sizeof(bool));
+    for (int i = 0; i < 25; i++) { grid[i] = true; }
+    room_set_floor_grid(test_room, grid);
+
+    //add a pushable at interior tile (2, 3)
+    Pushable *pushables = malloc(sizeof(Pushable));
+    pushables[0].id = 0;
+    pushables[0].name = strdup("Crate");
+    pushables[0].x = 2;
+    pushables[0].y = 3;
+    test_room->pushables = pushables;
+    test_room->pushable_count = 1;
+
+    int out_id = -1;
+    RoomTileType tile = room_classify_tile(test_room, 2, 3, &out_id);
+
+    //tile should be classified as pushable
+    ck_assert_int_eq(tile, ROOM_TILE_PUSHABLE);
+    //out_id should be the pushable index (0)
+    ck_assert_int_eq(out_id, 0);
+
+    room_destroy(test_room);
+}
+END_TEST
+
 
 
 /* ============================================================
@@ -755,6 +916,7 @@ Suite *room_suite(void)
     Suite *s = suite_create("Room");
     TCase *tc = tcase_create("HappyPath");
     TCase *a2 = tcase_create("Assignment2");
+    TCase *a3 = tcase_create("Assignment3");
 
     tcase_add_checked_fixture(tc, setup_room, teardown_room);
 
@@ -799,8 +961,17 @@ Suite *room_suite(void)
     tcase_add_test(a2, test_room_try_push_null_room);
     tcase_add_test(a2, test_room_try_push_invalid_index);
 
+    //assignment 3 tests
+    tcase_add_checked_fixture(a3, setup_room, teardown_room);
+
+    tcase_add_test(a3, test_ckowal_room_render_switch_off);
+    tcase_add_test(a3, test_ckowal_room_render_switch_pressed);
+    tcase_add_test(a3, test_ckowal_room_render_locked_portal_sentinel);
+    tcase_add_test(a3, test_ckowal_room_classify_tile_pushable);
+
     suite_add_tcase(s, tc);
     suite_add_tcase(s, a2);
+    suite_add_tcase(s, a3);
 
     return s;
 }

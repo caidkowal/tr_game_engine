@@ -633,7 +633,7 @@ Status game_engine_get_adjacency_matrix(const GameEngine *eng, int **matrix_out,
 
 
 /* ===========================================================
- * Portal functions (game_engine_portal.h)
+ * Portal functions (game_engine_extra.h)
  * Added for A3 - explicit portal control and tile lookahead
  * =========================================================== */
 
