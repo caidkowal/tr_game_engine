@@ -75,9 +75,9 @@ class GameEngine:
         """Traverse the portal the player is currently standing on.
 
         Raises:
-            NoPortalError    – player is not on a portal tile
-            ImpassableError  – portal is locked (switch not pressed)
-            NoSuchRoomError  – destination room not found
+            NoPortalError    - player is not on a portal tile
+            ImpassableError  - portal is locked (switch not pressed)
+            NoSuchRoomError  - destination room not found
         """
         status = lib.game_engine_use_portal(self._eng)
         if status != Status.OK:
@@ -108,22 +108,22 @@ class GameEngine:
             raise status_to_exception(status, "get_room_count failed")
         return count.value
 
-    def get_room_dimensions(self) -> tuple[int, int]:
+    def get_room_dimensions(self) -> tuple:
         width = ctypes.c_int()
         height = ctypes.c_int()
-        status = lib.game_engine_get_room_dimensions(self._eng,
-                                                      ctypes.byref(width),
-                                                      ctypes.byref(height))
+        status = lib.game_engine_get_room_dimensions(
+            self._eng, ctypes.byref(width), ctypes.byref(height)
+        )
         if status != Status.OK:
             raise status_to_exception(status, "get_room_dimensions failed")
         return (width.value, height.value)
 
-    def get_room_ids(self) -> list[int]:
+    def get_room_ids(self) -> list:
         ids_ptr = ctypes.POINTER(ctypes.c_int)()
         count = ctypes.c_int()
-        status = lib.game_engine_get_room_ids(self._eng,
-                                               ctypes.byref(ids_ptr),
-                                               ctypes.byref(count))
+        status = lib.game_engine_get_room_ids(
+            self._eng, ctypes.byref(ids_ptr), ctypes.byref(count)
+        )
         if status != Status.OK:
             raise status_to_exception(status, "get_room_ids failed")
 
@@ -138,17 +138,18 @@ class GameEngine:
             raise status_to_exception(status, "get_total_treasure_count failed")
         return count.value
 
-    def get_adjacency_matrix(self) -> list[list[int]]:
+    def get_adjacency_matrix(self) -> list:
         matrix_ptr = ctypes.POINTER(ctypes.c_int)()
         size = ctypes.c_int()
-        status = lib.game_engine_get_adjacency_matrix(self._eng,
-                                                       ctypes.byref(matrix_ptr),
-                                                       ctypes.byref(size))
+        status = lib.game_engine_get_adjacency_matrix(
+            self._eng, ctypes.byref(matrix_ptr), ctypes.byref(size)
+        )
         if status != Status.OK:
             raise status_to_exception(status, "get_adjacency_matrix failed")
 
-        n = size.value
-        matrix = [[matrix_ptr[i * n + j] for j in range(n)] for i in range(n)]
+        room_count = size.value
+        matrix = [[matrix_ptr[i * room_count + j] for j in range(room_count)]
+                  for i in range(room_count)]
         lib.game_engine_free_string(matrix_ptr)
         return matrix
 

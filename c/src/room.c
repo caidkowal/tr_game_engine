@@ -295,6 +295,102 @@ static bool portal_is_locked(const Room *r, int portal_idx) {
     return true;
 }
 
+/* ------------------------------------------------------------------
+ * render_base_layer (private helper)
+ * Fills buffer with wall/floor characters based on floor_grid.
+ * Extracted from room_render to reduce cognitive complexity.
+ * ------------------------------------------------------------------ */
+static void render_base_layer(const Room *r, const Charset *charset,
+                               char *buffer, int bw, int bh) {
+    for (int row = 0; row < bh; row++) {
+        for (int col = 0; col < bw; col++) {
+            int index = row * bw + col;
+            bool is_perimeter = (col == 0 || row == 0 ||
+                                 col == bw - 1 || row == bh - 1);
+            if (is_perimeter) {
+                buffer[index] = charset->wall;
+            } else if (r->floor_grid == NULL) {
+                buffer[index] = charset->floor;
+            } else {
+                buffer[index] = r->floor_grid[index] ? charset->floor : charset->wall;
+            }
+        }
+    }
+}
+
+/* ------------------------------------------------------------------
+ * render_switches (private helper)
+ * Overlays switch tiles: switch_on (+) when pressed, switch_off (=) otherwise.
+ * Explicit cast to char fixes narrowing conversion warning.
+ * ------------------------------------------------------------------ */
+static void render_switches(const Room *r, const Charset *charset,
+                             char *buffer, int bw) {
+    for (int i = 0; i < r->switch_count; i++) {
+        int index = r->switches[i].y * bw + r->switches[i].x;
+        bool pressed = false;
+        for (int j = 0; j < r->pushable_count; j++) {
+            if (r->pushables[j].x == r->switches[i].x &&
+                r->pushables[j].y == r->switches[i].y) {
+                pressed = true;
+                break;
+            }
+        }
+        buffer[index] = (char)(pressed ? charset->switch_on : charset->switch_off);
+    }
+}
+
+/* ------------------------------------------------------------------
+ * render_treasures (private helper)
+ * Overlays uncollected treasure characters.
+ * ------------------------------------------------------------------ */
+static void render_treasures(const Room *r, const Charset *charset,
+                              char *buffer, int bw) {
+    for (int i = 0; i < r->treasure_count; i++) {
+        if (!r->treasures[i].collected) {
+            int index = r->treasures[i].y * bw + r->treasures[i].x;
+            buffer[index] = charset->treasure;
+        }
+    }
+}
+
+/* ------------------------------------------------------------------
+ * render_portals (private helper)
+ * Overlays portals: charset->portal for open, '!' sentinel for locked.
+ * The UI layer renders '!' as a red X so the player always sees X.
+ * ------------------------------------------------------------------ */
+static void render_portals(const Room *r, const Charset *charset,
+                            char *buffer, int bw) {
+    for (int i = 0; i < r->portal_count; i++) {
+        int index = r->portals[i].y * bw + r->portals[i].x;
+        buffer[index] = portal_is_locked(r, i) ? '!' : charset->portal;
+    }
+}
+
+/* ------------------------------------------------------------------
+ * render_pushables (private helper)
+ * Overlays pushable characters, skipping any pushable that is resting
+ * on a switch tile (the switch_on char already shows there, implementing
+ * the instructor-approved "consume" behaviour for switch-in-front-of-portal).
+ * ------------------------------------------------------------------ */
+static void render_pushables(const Room *r, const Charset *charset,
+                              char *buffer, int bw) {
+    for (int i = 0; i < r->pushable_count; i++) {
+        bool on_switch = false;
+        for (int j = 0; j < r->switch_count; j++) {
+            if (r->pushables[i].x == r->switches[j].x &&
+                r->pushables[i].y == r->switches[j].y) {
+                on_switch = true;
+                break;
+            }
+        }
+        //if on_switch: the switch_on char (+) is already rendered - do nothing
+        if (!on_switch) {
+            int index = r->pushables[i].y * bw + r->pushables[i].x;
+            buffer[index] = charset->pushable;
+        }
+    }
+}
+
 Status room_render(const Room *r, const Charset *charset, char *buffer, 
                    int buffer_width, int buffer_height){
 
@@ -306,90 +402,11 @@ Status room_render(const Room *r, const Charset *charset, char *buffer,
         return INVALID_ARGUMENT;
     }
 
-    //floors and walls
-    for(int row = 0; row < buffer_height; row++){
-        for(int col = 0; col < buffer_width; col++){
-            int index = row * buffer_width + col;
-            
-            //check if we are at a perimeter
-            if (col == 0 || row == 0 || col == buffer_width - 1 || row == buffer_height - 1) {
-                buffer[index] = charset->wall;
-            }
-            //if floorgrid is null, assume the interior is all walkable
-            else if (r->floor_grid == NULL) {
-                buffer[index] = charset->floor;
-            }
-            //use the value from the floor grid, true=floor, false=wall
-            else {
-                if (r->floor_grid[index]) {
-                    buffer[index] = charset->floor;
-                } else {
-                    buffer[index] = charset->wall;
-                }
-            }
-
-        }
-    }
-
-    //overlay switches before portals and pushables
-    //a switch shows switch_on (+) when a pushable is on it, switch_off (=) otherwise
-    for (int i = 0; i < r->switch_count; i++) {
-        int index = r->switches[i].y * buffer_width + r->switches[i].x;
-
-        //check if any pushable is resting on this switch
-        bool pressed = false;
-        for (int j = 0; j < r->pushable_count; j++) {
-            if (r->pushables[j].x == r->switches[i].x &&
-                r->pushables[j].y == r->switches[i].y) {
-                pressed = true;
-                break;
-            }
-        }
-
-        buffer[index] = pressed ? charset->switch_on : charset->switch_off;
-    }
-
-    //overlay treasures (only uncollected)
-    for (int i = 0; i < r->treasure_count; i++) {
-        if (!r->treasures[i].collected) {
-            int index = r->treasures[i].y * buffer_width + r->treasures[i].x;
-            buffer[index] = charset->treasure;
-        }
-    }
-
-    //overlay portals
-    //open portals show charset->portal (the normal portal character, e.g. X)
-    //locked portals show '!' as a sentinel - the UI layer renders this as a red X
-    //so the player always sees X, but the color tells them if it's locked
-    for (int i = 0; i < r->portal_count; i++) {
-        int index = r->portals[i].y * buffer_width + r->portals[i].x;
-        if (portal_is_locked(r, i)) {
-            buffer[index] = '!';   /* locked portal sentinel: UI displays as red X */
-        } else {
-            buffer[index] = charset->portal;
-        }
-    }
-
-    //overlay pushables
-    //if a pushable is resting on a switch tile, skip rendering it as a pushable -
-    //the switch_on char (+) already shows there, visually "consuming" the pushable.
-    //this matches the instructor-approved behaviour for when the switch is directly
-    //in front of the portal it controls (so the player can still walk through).
-    for (int i = 0; i < r->pushable_count; i++) {
-        bool on_switch = false;
-        for (int j = 0; j < r->switch_count; j++) {
-            if (r->pushables[i].x == r->switches[j].x &&
-                r->pushables[i].y == r->switches[j].y) {
-                on_switch = true;
-                break;
-            }
-        }
-        if (!on_switch) {
-            int index = r->pushables[i].y * buffer_width + r->pushables[i].x;
-            buffer[index] = charset->pushable;
-        }
-        //if on_switch: the switch_on char (+) is already rendered - do nothing
-    }
+    render_base_layer(r, charset, buffer, buffer_width, buffer_height);
+    render_switches(r, charset, buffer, buffer_width);
+    render_treasures(r, charset, buffer, buffer_width);
+    render_portals(r, charset, buffer, buffer_width);
+    render_pushables(r, charset, buffer, buffer_width);
 
     return OK;
 

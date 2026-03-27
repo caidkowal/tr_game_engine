@@ -653,7 +653,8 @@ Status game_engine_peek_tile(const GameEngine *eng, Direction dir, int *tile_typ
     }
 
     //get current player position
-    int x = 0, y = 0;
+    int x = 0;
+    int y = 0;
     Status ps = player_get_position(eng->player, &x, &y);
     if (ps != OK) {
         return INTERNAL_ERROR;
@@ -688,6 +689,28 @@ Status game_engine_peek_tile(const GameEngine *eng, Direction dir, int *tile_typ
 
 
 /* ------------------------------------------------------------------
+ * portal_switch_is_pressed (private helper)
+ * Returns true if the switch with the given ID has a pushable on it.
+ * Extracted from game_engine_use_portal to reduce cognitive complexity.
+ * ------------------------------------------------------------------ */
+static bool portal_switch_is_pressed(const Room *room, int required_switch_id) {
+    for (int s = 0; s < room->switch_count; s++) {
+        if (room->switches[s].id != required_switch_id) {
+            continue;
+        }
+        //switch found - check if any pushable occupies its tile
+        for (int p = 0; p < room->pushable_count; p++) {
+            if (room->pushables[p].x == room->switches[s].x &&
+                room->pushables[p].y == room->switches[s].y) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
+/* ------------------------------------------------------------------
  * game_engine_use_portal
  * Traverse the portal the player is currently standing on.
  * Checks whether the portal is gated by a switch and whether that
@@ -703,7 +726,8 @@ Status game_engine_use_portal(GameEngine *eng) {
     }
 
     //get player's current position
-    int x = 0, y = 0;
+    int x = 0;
+    int y = 0;
     Status ps = player_get_position(eng->player, &x, &y);
     if (ps != OK) {
         return INTERNAL_ERROR;
@@ -740,26 +764,9 @@ Status game_engine_use_portal(GameEngine *eng) {
         return ROOM_NO_PORTAL;
     }
 
-    //check if portal is gated by a switch
+    //check if portal is gated by a switch that is not yet pressed
     if (portal->gated && portal->required_switch_id >= 0) {
-        bool switch_pressed = false;
-
-        //find the switch that controls this portal
-        for (int s = 0; s < room->switch_count; s++) {
-            if (room->switches[s].id == portal->required_switch_id) {
-                //switch is pressed when any pushable occupies its tile
-                for (int p = 0; p < room->pushable_count; p++) {
-                    if (room->pushables[p].x == room->switches[s].x &&
-                        room->pushables[p].y == room->switches[s].y) {
-                        switch_pressed = true;
-                        break;
-                    }
-                }
-                break;
-            }
-        }
-
-        if (!switch_pressed) {
+        if (!portal_switch_is_pressed(room, portal->required_switch_id)) {
             return ROOM_IMPASSABLE;
         }
     }
@@ -774,7 +781,8 @@ Status game_engine_use_portal(GameEngine *eng) {
     //move player to new room and place at start position
     player_move_to_room(eng->player, destination);
 
-    int start_x = 0, start_y = 0;
+    int start_x = 0;
+    int start_y = 0;
     Status rs = room_get_start_position(target, &start_x, &start_y);
     if (rs != OK) {
         return INTERNAL_ERROR;
