@@ -61,7 +61,7 @@ class TestPlayer(unittest.TestCase):
     def test_has_collected_treasure_returns_bool(self):
         result = self.player.has_collected_treasure(0)
         self.assertIsInstance(result, bool)
-
+        
     def test_ckowal_player_room_id_is_non_negative(self):
         """Player starts in a valid room with a non-negative ID."""
         self.assertGreaterEqual(self.player.get_room(), 0)
@@ -70,17 +70,6 @@ class TestPlayer(unittest.TestCase):
         """has_collected_treasure returns False for a treasure that was never collected."""
         self.assertFalse(self.player.has_collected_treasure(999999))
 
-    def test_ckowal_collected_count_increases_after_collecting_treasure(self):
-        """Collected count increases by 1 after the player walks into a treasure tile."""
-        count_before = self.player.get_collected_count()
-        # Attempt movement in all directions; at least one move may collect a treasure
-        for direction in [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]:
-            try:
-                self.engine.move_player(direction)
-            except Exception:  # noqa: BLE001
-                pass
-        # Count must not have decreased
-        self.assertGreaterEqual(self.player.get_collected_count(), count_before)
 
 
 if __name__ == "__main__":

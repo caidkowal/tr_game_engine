@@ -6,7 +6,6 @@ from treasure_runner.bindings.bindings import Direction, RoomTileType
 
 CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../assets/starter.ini"))
 
-#test comment
 class TestGameEngine(unittest.TestCase):
 
     def setUp(self):
