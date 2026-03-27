@@ -312,7 +312,7 @@ static void render_base_layer(const Room *r, const Charset *charset,
             } else if (r->floor_grid == NULL) {
                 buffer[index] = charset->floor;
             } else {
-                buffer[index] = r->floor_grid[index] ? charset->floor : charset->wall;
+                buffer[index] = (char)(r->floor_grid[index] ? charset->floor : charset->wall);
             }
         }
     }
@@ -362,7 +362,7 @@ static void render_portals(const Room *r, const Charset *charset,
                             char *buffer, int bw) {
     for (int i = 0; i < r->portal_count; i++) {
         int index = r->portals[i].y * bw + r->portals[i].x;
-        buffer[index] = portal_is_locked(r, i) ? '!' : charset->portal;
+        buffer[index] = (char)(portal_is_locked(r, i) ? '!' : charset->portal);
     }
 }
 

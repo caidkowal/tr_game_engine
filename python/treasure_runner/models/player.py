@@ -37,4 +37,3 @@ class Player:
                 "collected": treasure_obj.collected,
             })
         return result
-        

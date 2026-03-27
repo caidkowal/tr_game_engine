@@ -23,6 +23,9 @@ MIN_COLS = 60
 # but the color tells them whether it is locked or open.
 LOCKED_PORTAL_SENTINEL = '!'
 
+# Column at which the legend is rendered beside the room
+_LEGEND_COL = 40
+
 # Legend entries: (raw_char, description)
 # raw_char is fed through _char_display so '!' renders as red X automatically.
 _LEGEND = [
@@ -374,18 +377,17 @@ class GameUI:
         Returns the next available row after the room.
         """
         room_id = self._engine.player.get_room()
-        room_name = self._get_room_name(room_id)
-        self._safe_addstr(stdscr, 1, 0, f"Room {room_id}: {room_name}"[:width - 1])
+        label = f"Room {room_id}: {self._get_room_name(room_id)}"
+        self._safe_addstr(stdscr, 1, 0, label[:width - 1])
 
         room_lines = self._engine.render_current_room().splitlines()
-        legend_col = 40
         row = 2
 
         for idx, line in enumerate(room_lines):
             if row >= height - 3:
                 break
             self._draw_room_line(stdscr, row, line, width)
-            self._draw_legend_entry(stdscr, row, legend_col, idx)
+            self._draw_legend_entry(stdscr, row, _LEGEND_COL, idx)
             row += 1
 
         return row
@@ -416,19 +418,20 @@ class GameUI:
         msg = self._message or ""
         self._safe_addstr(stdscr, row, 0, msg.ljust(width - 1)[:width - 1])
 
+    def _build_status_text(self) -> str:
+        """Build the player status bar string."""
+        player = self._engine.player
+        x_pos, y_pos = player.get_position()
+        return (
+            f"Player: {self._profile.get('player_name', 'Player')}  |  "
+            f"Room: {player.get_room()}  |  "
+            f"Pos: ({x_pos},{y_pos})  |  "
+            f"Treasures: {player.get_collected_count()}/{self._engine.get_total_treasure_count()}"
+        )
+
     def _draw_status_bar(self, stdscr, row: int, width: int) -> None:
         """Render player stats at the given row."""
-        player = self._engine.player
-        collected = player.get_collected_count()
-        total = self._engine.get_total_treasure_count()
-        room_id = player.get_room()
-        name = self._profile.get("player_name", "Player")
-        x_pos, y_pos = player.get_position()
-        status = (
-            f"Player: {name}  |  Room: {room_id}  |  "
-            f"Pos: ({x_pos},{y_pos})  |  Treasures: {collected}/{total}"
-        )
-        self._safe_addstr(stdscr, row, 0, status[:width - 1])
+        self._safe_addstr(stdscr, row, 0, self._build_status_text()[:width - 1])
 
     def _draw_controls(self, stdscr, row: int, width: int) -> None:
         """Render the controls legend at the given row."""
@@ -443,6 +446,14 @@ class GameUI:
         title = "Treasure Runner  |  ckowal02@uoguelph.ca"
         self._safe_addstr(stdscr, row, 0, title[:width - 1])
 
+    def _minimap_attr(self, room_id: int, current_room_id: int) -> int:
+        """Return the curses color attribute for a minimap room entry."""
+        if room_id == current_room_id:
+            return curses.color_pair(2)
+        if room_id in self._visited_rooms:
+            return curses.color_pair(4)
+        return 0
+
     def _draw_minimap(self, stdscr, start_row: int, start_col: int) -> None:
         """Draw the room adjacency minimap with correct room-ID colouring.
 
@@ -451,24 +462,17 @@ class GameUI:
         """
         matrix = self._engine.get_adjacency_matrix()
         room_ids = self._engine.get_room_ids()
-        room_count = len(matrix)
         current = self._engine.player.get_room()
 
         self._safe_addstr(stdscr, start_row - 1, start_col, "Minimap:")
 
-        for idx in range(room_count):
-            room_id = room_ids[idx]
-            if room_id == current:
-                attr = curses.color_pair(2)
-            elif room_id in self._visited_rooms:
-                attr = curses.color_pair(4)
-            else:
-                attr = 0
+        for idx, room_id in enumerate(room_ids):
             conn_str = ", ".join(
-                str(room_ids[j]) for j in range(room_count) if matrix[idx][j] == 1
+                str(room_ids[j]) for j in range(len(matrix)) if matrix[idx][j] == 1
             )
             self._safe_addstr(stdscr, start_row + idx, start_col,
-                               f"[{room_id}]-> {conn_str}", attr)
+                               f"[{room_id}]-> {conn_str}",
+                               self._minimap_attr(room_id, current))
 
     # ------------------------------------------------------------------
     # Profile update
