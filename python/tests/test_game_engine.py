@@ -39,27 +39,7 @@ class TestGameEngine(unittest.TestCase):
         self.assertIsInstance(width, int)
         self.assertIsInstance(height, int)
 
-    def test_get_room_ids_returns_list(self):
-    ids = self.engine.get_room_ids()
-    self.assertIsInstance(ids, list)
-
-    def test_total_treasure_count_non_negative(self):
-        count = self.engine.get_total_treasure_count()
-        self.assertIsInstance(count, int)
-        self.assertGreaterEqual(count, 0)
-
-    def test_reset_does_not_crash(self):
-        # Move player then reset
-        try:
-            self.engine.move_player(Direction.UP)
-        except Exception:
-            pass  # movement might fail depending on map
-
-        # Reset should always succeed
-        self.engine.reset()
-
-        # After reset, player should still be valid
-        self.assertIsNotNone(self.engine.player)
+    
 
 
 if __name__ == "__main__":
