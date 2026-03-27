@@ -61,6 +61,20 @@ class TestPlayer(unittest.TestCase):
         result = self.player.has_collected_treasure(0)
         self.assertIsInstance(result, bool)
 
+    def test_get_position_returns_tuple_length_2(self):
+    pos = self.player.get_position()
+    self.assertEqual(len(pos), 2)
+
+    def test_collected_count_matches_list_length(self):
+        count = self.player.get_collected_count()
+        treasures = self.player.get_collected_treasures()
+        self.assertEqual(count, len(treasures))
+
+    def test_has_collected_invalid_id_returns_bool(self):
+        # Using a large ID that likely doesn't exist
+        result = self.player.has_collected_treasure(9999)
+        self.assertIsInstance(result, bool)
+
 
 if __name__ == "__main__":
     unittest.main()
