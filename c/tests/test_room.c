@@ -907,6 +907,182 @@ START_TEST(test_ckowal_room_classify_tile_pushable)
 END_TEST
 
 
+/* room_try_push north moves pushable up by one row */
+START_TEST(test_ckowal_room_try_push_north)
+{
+    Room *test_room = room_create(10, "PushNorth", 5, 5);
+
+    bool *grid = malloc(5 * 5 * sizeof(bool));
+    for (int i = 0; i < 25; i++) { grid[i] = true; }
+    room_set_floor_grid(test_room, grid);
+
+    Pushable *pushables = malloc(sizeof(Pushable));
+    pushables[0].id = 0;
+    pushables[0].name = strdup("Rock");
+    pushables[0].x = 2;
+    pushables[0].y = 3;
+    test_room->pushables = pushables;
+    test_room->pushable_count = 1;
+
+    Status s = room_try_push(test_room, 0, DIR_NORTH);
+    ck_assert_int_eq(s, OK);
+    ck_assert_int_eq(test_room->pushables[0].x, 2);
+    ck_assert_int_eq(test_room->pushables[0].y, 2);
+
+    room_destroy(test_room);
+}
+END_TEST
+
+/* room_try_push south moves pushable down by one row */
+START_TEST(test_ckowal_room_try_push_south)
+{
+    Room *test_room = room_create(10, "PushSouth", 5, 5);
+
+    bool *grid = malloc(5 * 5 * sizeof(bool));
+    for (int i = 0; i < 25; i++) { grid[i] = true; }
+    room_set_floor_grid(test_room, grid);
+
+    Pushable *pushables = malloc(sizeof(Pushable));
+    pushables[0].id = 0;
+    pushables[0].name = strdup("Rock");
+    pushables[0].x = 2;
+    pushables[0].y = 2;
+    test_room->pushables = pushables;
+    test_room->pushable_count = 1;
+
+    Status s = room_try_push(test_room, 0, DIR_SOUTH);
+    ck_assert_int_eq(s, OK);
+    ck_assert_int_eq(test_room->pushables[0].x, 2);
+    ck_assert_int_eq(test_room->pushables[0].y, 3);
+
+    room_destroy(test_room);
+}
+END_TEST
+
+/* room_try_push west moves pushable left by one column */
+START_TEST(test_ckowal_room_try_push_west)
+{
+    Room *test_room = room_create(10, "PushWest", 5, 5);
+
+    bool *grid = malloc(5 * 5 * sizeof(bool));
+    for (int i = 0; i < 25; i++) { grid[i] = true; }
+    room_set_floor_grid(test_room, grid);
+
+    Pushable *pushables = malloc(sizeof(Pushable));
+    pushables[0].id = 0;
+    pushables[0].name = strdup("Rock");
+    pushables[0].x = 3;
+    pushables[0].y = 2;
+    test_room->pushables = pushables;
+    test_room->pushable_count = 1;
+
+    Status s = room_try_push(test_room, 0, DIR_WEST);
+    ck_assert_int_eq(s, OK);
+    ck_assert_int_eq(test_room->pushables[0].x, 2);
+    ck_assert_int_eq(test_room->pushables[0].y, 2);
+
+    room_destroy(test_room);
+}
+END_TEST
+
+/* room_try_push into a portal tile returns ROOM_IMPASSABLE */
+START_TEST(test_ckowal_room_try_push_into_portal_blocked)
+{
+    Room *test_room = room_create(10, "PushPortal", 5, 5);
+
+    bool *grid = malloc(5 * 5 * sizeof(bool));
+    for (int i = 0; i < 25; i++) { grid[i] = true; }
+    room_set_floor_grid(test_room, grid);
+
+    //portal at (3, 2) - pushing east into it should be blocked
+    Portal *portals = malloc(sizeof(Portal));
+    portals[0].id = 0;
+    portals[0].name = strdup("Door");
+    portals[0].x = 3;
+    portals[0].y = 2;
+    portals[0].target_room_id = 5;
+    portals[0].gated = false;
+    portals[0].required_switch_id = -1;
+    room_set_portals(test_room, portals, 1);
+
+    Pushable *pushables = malloc(sizeof(Pushable));
+    pushables[0].id = 0;
+    pushables[0].name = strdup("Rock");
+    pushables[0].x = 2;
+    pushables[0].y = 2;
+    test_room->pushables = pushables;
+    test_room->pushable_count = 1;
+
+    //pushing east would land on the portal tile - should return ROOM_IMPASSABLE
+    Status s = room_try_push(test_room, 0, DIR_EAST);
+    ck_assert_int_eq(s, ROOM_IMPASSABLE);
+
+    //pushable position must not have changed
+    ck_assert_int_eq(test_room->pushables[0].x, 2);
+    ck_assert_int_eq(test_room->pushables[0].y, 2);
+
+    room_destroy(test_room);
+}
+END_TEST
+
+/* collected treasure is not returned by room_get_treasure_at */
+START_TEST(test_ckowal_room_get_treasure_at_collected_skipped)
+{
+    Room *test_room = room_create(1, "CollectTest", 5, 5);
+    ck_assert_ptr_nonnull(test_room);
+
+    Treasure t;
+    t.id = 77;
+    t.name = strdup("Jewel");
+    t.x = 2;
+    t.y = 2;
+    t.collected = true;   //already collected
+    room_place_treasure(test_room, &t);
+
+    //should return -1 because treasure is already collected
+    ck_assert_int_eq(room_get_treasure_at(test_room, 2, 2), -1);
+
+    room_destroy(test_room);
+}
+END_TEST
+
+/* collected treasure is classified as floor, not treasure */
+START_TEST(test_ckowal_room_classify_collected_treasure_is_floor)
+{
+    Room *test_room = room_create(1, "CollectedFloor", 5, 5);
+    ck_assert_ptr_nonnull(test_room);
+
+    bool *grid = malloc(5 * 5 * sizeof(bool));
+    for (int i = 0; i < 25; i++) { grid[i] = true; }
+    room_set_floor_grid(test_room, grid);
+
+    //place a collected treasure at (2, 2)
+    Treasure t;
+    t.id = 88;
+    t.name = strdup("OldGold");
+    t.x = 2;
+    t.y = 2;
+    t.collected = true;
+    room_place_treasure(test_room, &t);
+
+    //collected treasure should appear as FLOOR, not TREASURE
+    RoomTileType tile = room_classify_tile(test_room, 2, 2, NULL);
+    ck_assert_int_eq(tile, ROOM_TILE_FLOOR);
+
+    room_destroy(test_room);
+}
+END_TEST
+
+/* room_set_floor_grid with null room returns INVALID_ARGUMENT */
+START_TEST(test_ckowal_room_set_floor_grid_null_room)
+{
+    bool *grid = malloc(4 * sizeof(bool));
+    Status s = room_set_floor_grid(NULL, grid);
+    ck_assert_int_eq(s, INVALID_ARGUMENT);
+    free(grid);
+}
+END_TEST
+
 
 /* ============================================================
  * Suite Creation Function
@@ -917,6 +1093,7 @@ Suite *room_suite(void)
     TCase *tc = tcase_create("HappyPath");
     TCase *a2 = tcase_create("Assignment2");
     TCase *a3 = tcase_create("Assignment3");
+    TCase *a3b = tcase_create("Assignment3Extra");
 
     tcase_add_checked_fixture(tc, setup_room, teardown_room);
 
@@ -969,9 +1146,21 @@ Suite *room_suite(void)
     tcase_add_test(a3, test_ckowal_room_render_locked_portal_sentinel);
     tcase_add_test(a3, test_ckowal_room_classify_tile_pushable);
 
+    //assignment 3 extra coverage
+    tcase_add_checked_fixture(a3b, setup_room, teardown_room);
+
+    tcase_add_test(a3b, test_ckowal_room_try_push_north);
+    tcase_add_test(a3b, test_ckowal_room_try_push_south);
+    tcase_add_test(a3b, test_ckowal_room_try_push_west);
+    tcase_add_test(a3b, test_ckowal_room_try_push_into_portal_blocked);
+    tcase_add_test(a3b, test_ckowal_room_get_treasure_at_collected_skipped);
+    tcase_add_test(a3b, test_ckowal_room_classify_collected_treasure_is_floor);
+    tcase_add_test(a3b, test_ckowal_room_set_floor_grid_null_room);
+
     suite_add_tcase(s, tc);
     suite_add_tcase(s, a2);
     suite_add_tcase(s, a3);
+    suite_add_tcase(s, a3b);
 
     return s;
 }

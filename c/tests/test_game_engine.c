@@ -400,6 +400,139 @@ START_TEST(test_ckowal_use_portal_not_on_portal_tile)
 END_TEST
 
 
+/* game_engine_get_total_treasure_count returns a non-negative count */
+START_TEST(test_ckowal_get_total_treasure_count_basic)
+{
+    int count = -1;
+    Status s = game_engine_get_total_treasure_count(engine, &count);
+    ck_assert_int_eq(s, OK);
+    //starter.ini world must have at least 0 treasures
+    ck_assert_int_ge(count, 0);
+}
+END_TEST
+
+/* game_engine_get_total_treasure_count null engine returns INVALID_ARGUMENT */
+START_TEST(test_ckowal_get_total_treasure_count_null_engine)
+{
+    int count = -1;
+    Status s = game_engine_get_total_treasure_count(NULL, &count);
+    ck_assert_int_eq(s, INVALID_ARGUMENT);
+}
+END_TEST
+
+/* game_engine_get_total_treasure_count null count_out returns NULL_POINTER */
+START_TEST(test_ckowal_get_total_treasure_count_null_count)
+{
+    Status s = game_engine_get_total_treasure_count(engine, NULL);
+    ck_assert_int_eq(s, NULL_POINTER);
+}
+END_TEST
+
+/* game_engine_get_adjacency_matrix returns an n x n matrix for n rooms */
+START_TEST(test_ckowal_get_adjacency_matrix_basic)
+{
+    int *matrix = NULL;
+    int size = 0;
+
+    Status s = game_engine_get_adjacency_matrix(engine, &matrix, &size);
+    ck_assert_int_eq(s, OK);
+    ck_assert_ptr_nonnull(matrix);
+
+    //starter.ini has 3 rooms so matrix should be 3x3
+    ck_assert_int_eq(size, 3);
+
+    //all values must be 0 or 1 (adjacency flags)
+    for (int i = 0; i < size * size; i++) {
+        ck_assert_int_ge(matrix[i], 0);
+        ck_assert_int_le(matrix[i], 1);
+    }
+
+    //diagonal must be 0 (rooms do not list themselves as neighbours)
+    for (int i = 0; i < size; i++) {
+        ck_assert_int_eq(matrix[i * size + i], 0);
+    }
+
+    game_engine_free_string(matrix);
+}
+END_TEST
+
+/* game_engine_get_adjacency_matrix null engine returns INVALID_ARGUMENT */
+START_TEST(test_ckowal_get_adjacency_matrix_null_engine)
+{
+    int *matrix = NULL;
+    int size = 0;
+    Status s = game_engine_get_adjacency_matrix(NULL, &matrix, &size);
+    ck_assert_int_eq(s, INVALID_ARGUMENT);
+}
+END_TEST
+
+/* game_engine_get_adjacency_matrix null output args return NULL_POINTER */
+START_TEST(test_ckowal_get_adjacency_matrix_null_outputs)
+{
+    int *matrix = NULL;
+    int size = 0;
+
+    //null matrix_out
+    Status s1 = game_engine_get_adjacency_matrix(engine, NULL, &size);
+    ck_assert_int_eq(s1, NULL_POINTER);
+
+    //null size_out
+    Status s2 = game_engine_get_adjacency_matrix(engine, &matrix, NULL);
+    ck_assert_int_eq(s2, NULL_POINTER);
+}
+END_TEST
+
+/* game_engine_move_player into a wall returns ROOM_IMPASSABLE */
+START_TEST(test_ckowal_move_player_into_wall_returns_impassable)
+{
+    //move north repeatedly until the perimeter wall is reached
+    Status last = OK;
+    for (int i = 0; i < 20; i++) {
+        last = game_engine_move_player(engine, DIR_NORTH);
+        if (last == ROOM_IMPASSABLE) {
+            break;
+        }
+    }
+    ck_assert_int_eq(last, ROOM_IMPASSABLE);
+}
+END_TEST
+
+/* game_engine_render_room with an invalid room id returns GE_NO_SUCH_ROOM */
+START_TEST(test_ckowal_render_room_invalid_id_returns_error)
+{
+    char *output = NULL;
+    //use a room id that definitely does not exist
+    Status s = game_engine_render_room(engine, 99999, &output);
+    ck_assert_int_eq(s, GE_NO_SUCH_ROOM);
+    ck_assert_ptr_null(output);
+}
+END_TEST
+
+/* game_engine_get_room_count with null count_out returns NULL_POINTER */
+START_TEST(test_ckowal_get_room_count_null_count)
+{
+    Status s = game_engine_get_room_count(engine, NULL);
+    ck_assert_int_eq(s, NULL_POINTER);
+}
+END_TEST
+
+/* game_engine_get_room_dimensions with null args return NULL_POINTER */
+START_TEST(test_ckowal_get_room_dimensions_null_args)
+{
+    int width = 0;
+    int height = 0;
+
+    //null width_out
+    Status s1 = game_engine_get_room_dimensions(engine, NULL, &height);
+    ck_assert_int_eq(s1, NULL_POINTER);
+
+    //null height_out
+    Status s2 = game_engine_get_room_dimensions(engine, &width, NULL);
+    ck_assert_int_eq(s2, NULL_POINTER);
+}
+END_TEST
+
+
 /* ============================================================ */
 /* Suite */
 /* ============================================================ */
@@ -410,6 +543,7 @@ Suite *engine_suite(void)
     TCase *tc = tcase_create("HappyPath");
     TCase *a2 = tcase_create("Assignment2");
     TCase *a3 = tcase_create("Assignment3");
+    TCase *a3b = tcase_create("Assignment3Extra");
 
     tcase_add_checked_fixture(tc, setup_engine, teardown_engine);
 
@@ -439,8 +573,23 @@ Suite *engine_suite(void)
     tcase_add_test(a3, test_ckowal_set_player_position_null_engine);
     tcase_add_test(a3, test_ckowal_use_portal_not_on_portal_tile);
 
+    //assignment 3 extra coverage
+    tcase_add_checked_fixture(a3b, setup_engine, teardown_engine);
+
+    tcase_add_test(a3b, test_ckowal_get_total_treasure_count_basic);
+    tcase_add_test(a3b, test_ckowal_get_total_treasure_count_null_engine);
+    tcase_add_test(a3b, test_ckowal_get_total_treasure_count_null_count);
+    tcase_add_test(a3b, test_ckowal_get_adjacency_matrix_basic);
+    tcase_add_test(a3b, test_ckowal_get_adjacency_matrix_null_engine);
+    tcase_add_test(a3b, test_ckowal_get_adjacency_matrix_null_outputs);
+    tcase_add_test(a3b, test_ckowal_move_player_into_wall_returns_impassable);
+    tcase_add_test(a3b, test_ckowal_render_room_invalid_id_returns_error);
+    tcase_add_test(a3b, test_ckowal_get_room_count_null_count);
+    tcase_add_test(a3b, test_ckowal_get_room_dimensions_null_args);
+
     suite_add_tcase(s, tc);
     suite_add_tcase(s, a2);
     suite_add_tcase(s, a3);
+    suite_add_tcase(s, a3b);
     return s;
 }

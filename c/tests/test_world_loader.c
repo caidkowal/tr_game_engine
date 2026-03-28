@@ -162,6 +162,50 @@ START_TEST(test_ckowal_loader_switches_consistent_with_portals)
 END_TEST
 
 
+/* loader_load_world with null graph_out returns INVALID_ARGUMENT */
+START_TEST(test_ckowal_loader_null_graph_out_returns_invalid)
+{
+    Room  *out_room  = NULL;
+    int    out_count = 0;
+    Charset out_cs;
+
+    Status s = loader_load_world("../assets/starter.ini",
+                                 NULL, &out_room,
+                                 &out_count, &out_cs);
+    ck_assert_int_eq(s, INVALID_ARGUMENT);
+}
+END_TEST
+
+/* graph has at least one directed edge (connect_rooms was called and worked) */
+START_TEST(test_ckowal_loader_graph_has_edges)
+{
+    //starter.ini rooms are connected via portals so the graph must have edges
+    int edges = graph_edge_count(graph);
+    ck_assert_int_gt(edges, 0);
+}
+END_TEST
+
+/* treasure names are deep-copied: freeing datagen does not corrupt them */
+START_TEST(test_ckowal_loader_treasure_names_are_deep_copied)
+{
+    const void * const *payloads = NULL;
+    int count = 0;
+
+    GraphStatus gs = graph_get_all_payloads(graph, &payloads, &count);
+    ck_assert_int_eq(gs, GRAPH_STATUS_OK);
+
+    //verify every treasure has a non-NULL, non-empty name
+    for (int i = 0; i < count; i++) {
+        const Room *room = (const Room *)payloads[i];
+        for (int t = 0; t < room->treasure_count; t++) {
+            ck_assert_ptr_nonnull(room->treasures[t].name);
+            ck_assert_int_gt((int)strlen(room->treasures[t].name), 0);
+        }
+    }
+}
+END_TEST
+
+
 /* ============================================================
  * Suite
  * ============================================================ */
@@ -171,6 +215,7 @@ Suite *loader_suite(void)
     Suite *s = suite_create("WorldLoader");
     TCase *tc = tcase_create("HappyPath");
     TCase *a3 = tcase_create("Assignment3");
+    TCase *a3b = tcase_create("Assignment3Extra");
 
     tcase_add_checked_fixture(tc, setup_loader, teardown_loader);
     tcase_add_test(tc, test_loader_basic_success);
@@ -184,7 +229,15 @@ Suite *loader_suite(void)
     tcase_add_test(a3, test_ckowal_loader_portal_gated_field_is_initialised);
     tcase_add_test(a3, test_ckowal_loader_switches_consistent_with_portals);
 
+    //assignment 3 extra coverage
+    tcase_add_checked_fixture(a3b, setup_loader, teardown_loader);
+
+    tcase_add_test(a3b, test_ckowal_loader_null_graph_out_returns_invalid);
+    tcase_add_test(a3b, test_ckowal_loader_graph_has_edges);
+    tcase_add_test(a3b, test_ckowal_loader_treasure_names_are_deep_copied);
+
     suite_add_tcase(s, tc);
     suite_add_tcase(s, a3);
+    suite_add_tcase(s, a3b);
     return s;
 }
