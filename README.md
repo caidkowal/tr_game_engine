@@ -10,7 +10,7 @@ A multi-language dungeon exploration game built in C and Python. The game engine
 
 | Layer | Technology |
 |-------|-----------|
-| Game Engine | C (compiled to shared library `libbackend.so`) |
+| Game Engine | C |
 | Python Bindings | `ctypes` |
 | UI | Python `curses` |
 | Serialization | Python `json` |
@@ -68,7 +68,7 @@ The C side owns all game state. The Python side only owns the player profile dic
 ### Core
 - Dungeon exploration across multiple connected rooms
 - Treasure collection, pushable block puzzles, portal traversal
-- Player profile persistence via JSON — tracks games played, max treasures, rooms visited, last played timestamp
+- Player profile persistence via JSON - tracks games played, max treasures, rooms visited, last played timestamp
 - Full curses terminal UI with message bar, legend, minimap, status bar, splash and quit screens
 - Game reset and terminal size validation
 
@@ -112,4 +112,4 @@ The C side owns all game state. The Python side only owns the player profile dic
 
 ## Author
 
-Caiden Kowalchuk — ckowal02@uoguelph.ca
+Caiden Kowalchuk

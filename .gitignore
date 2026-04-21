@@ -74,3 +74,9 @@ assets/*.ini
 
 # Player profile files (personal data)
 assets/*.json
+
+env.sh
+Makefile
+.gitignore
+
+dist
